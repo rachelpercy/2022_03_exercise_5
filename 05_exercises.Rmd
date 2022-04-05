@@ -12,15 +12,13 @@ output:
 
 
 ```{r setup, include=FALSE}
-#knitr::opts_chunk$set(echo = TRUE, error=TRUE, message=FALSE, warning=FALSE)
+knitr::opts_chunk$set(echo = TRUE, error=TRUE, message=FALSE, warning=FALSE)
 ```
 
 ```{r libraries}
 library(tidyverse)     # for data cleaning and plotting
 library(gardenR)       # for Lisa's garden data
-library(lubridate)     # for date manipulation
 library(openintro)     # for the abbr2state() function
-library(palmerpenguins)# for Palmer penguin data
 library(maps)          # for map data
 library(ggmap)         # for mapping points on maps
 library(gplots)        # for col2hex() function
@@ -35,6 +33,7 @@ library(gifski)        # need the library for creating gifs but don't need to lo
 library(shiny)         # for creating interactive apps
 library(ggthemes)
 library(ggimage)
+library(lubridate)
 theme_set(theme_minimal())
 ```
 
@@ -117,6 +116,12 @@ ggplotly(stations_interact,
          tooltip = c("text", "fill"))
 ```
 
+I talked with Lisa about this map. She said that ggplotly messes up the "order" variable and that I should just submit the map anyways.
+
+
+
+
+
 ```{r}
 #From Exercise #3
 harvest_interact <- garden_harvest %>% 
@@ -148,11 +153,15 @@ trains_anim <- small_trains %>%
   ggplot(aes(x = avg_delay_hr,
              y = year,
              group = departure_station)) +
+  geom_point(color = "darkblue",
+             size = 3) +
   labs(title = "Average Delay (in hours) of Trains from Stations in France",
        subtitle = "Station: {closest_state}",
        x = "",
        y = "") +
-  transition_states(departure_station)
+  transition_states(departure_station,
+                    transition_length = 3, 
+                    state_length = 1)
 
 animate(trains_anim)
 
@@ -173,8 +182,8 @@ knitr::include_graphics("trains_anim.gif")
   * Use the data you just made to create a static cumulative harvest area plot, with the areas filled with different colors for each variety and arranged (HINT: `fct_reorder()`) from most to least harvested weights (most on the bottom).  
   * Add animation to reveal the plot over date. Instead of having a legend, place the variety names directly on the graph (refer back to the tutorial for how to do this).
 
-```{r}
-garden_harvest %>% 
+```{r eval=FALSE}
+garden_anim <- garden_harvest %>% 
   filter(vegetable == "tomatoes") %>% 
   group_by(date, variety) %>% 
   summarize(daily_harvest_lb = sum(weight)*0.00220462) %>% 
@@ -185,11 +194,31 @@ garden_harvest %>%
   group_by(variety) %>% 
   mutate(var_cum_harvest = cumsum(daily_harvest_lb)) %>% 
   ggplot(aes(x = date,
-             y = fct_reorder(variety, var_cum_harvest),
-             fill = variety)) +
-  geom_col()
+             y = var_cum_harvest,
+             fill = fct_reorder(variety, var_cum_harvest, max),
+             alpha = 0.8)) +
+  labs(title = "Cumulative harvest (lb) of tomato varieties over time", 
+       subtitle = "Date: {frame_along}",
+       x = "",
+       y = "",
+       color = "variety") +
+  geom_area() +
+  geom_text(aes(label = variety),
+            position = "stack") +
+  transition_reveal(date) +
+  theme(legend.position = "none") 
+
+animate(garden_anim)
+
+anim_save("garden_anim.gif")
   
 ```
+
+```{r, echo=FALSE}
+knitr::include_graphics("garden_anim.gif")
+```
+
+
 
 
 ## Maps, animation, and movement!
@@ -213,16 +242,19 @@ mallorca_map <- get_stamenmap(
 
 bike_image_link <- "https://raw.githubusercontent.com/llendway/animation_and_interactivity/master/bike.png"
 
-#looks like I need to mutate to add the image, but how do I do that?
-#mallorca_bike_day7 %>% 
-  #mutate(image = bike_image_link) %>%
-  ggmap(mallorca_map) +
+
+mallorca_anim <- ggmap(mallorca_map) +
   geom_path(data = mallorca_bike_day7, 
             aes(x = lon, y = lat, color = ele),
             size = .8) +
   scale_color_viridis_c(option = "magma") +
-  #geom_image(aes(image = image),
-             #size = 0,3) +
+  #geom_point(data = mallorca_bike_day7, 
+            #aes(x = lon, y = lat),
+            #size = 2,
+            #color = "red") +
+  geom_image(data = mallorca_bike_day7,
+             aes(x = lon, y = lat, image = bike_image_link),
+             size = 0.1) +
   theme_map() +
   theme(legend.background = element_blank()) +
   labs(title = "Lisa's Mallorca, Spain Bike Ride", 
@@ -231,6 +263,9 @@ bike_image_link <- "https://raw.githubusercontent.com/llendway/animation_and_int
        y = "",
        color = "ele") +
   transition_reveal(time)
+  
+animate(mallorca_anim,
+        rewind=FALSE) 
   
 anim_save("mallorca_anim.gif")
 ```
@@ -241,13 +276,13 @@ knitr::include_graphics("mallorca_anim.gif")
 ```
   
   
+> I definitely prefer this animated graph compared to its static counterpart because it makes me feel like I'm watching the ride happen. Watching the elevation change in time helps me imagine what it might be like to hit those hilly terrains at different parts of the ride. I tried to set loop=FALSE so that the animation ends when the ride ends. 
   
   
-  
-  
-  
-  
-  5. In this exercise, you get to meet Lisa's sister, Heather! She is a proud Mac grad, currently works as a Data Scientist where she uses R everyday, and for a few years (while still holding a full-time job) she was a pro triathlete. You are going to map one of her races. The data from each discipline of the Ironman 70.3 Pan Am championships, Panama is in a separate file - `panama_swim`, `panama_bike`, and `panama_run`. Create a similar map to the one you created with my cycling data. You will need to make some small changes: 1. combine the files putting them in swim, bike, run order (HINT: `bind_rows()`), 2. make the leading dot a different color depending on the event (for an extra challenge, make it a different image using `geom_image()!), 3. CHALLENGE (optional): color by speed, which you will need to compute on your own from the data. You can read Heather's race report [here](https://heatherlendway.com/2016/02/10/ironman-70-3-pan-american-championships-panama-race-report/). She is also in the Macalester Athletics [Hall of Fame](https://athletics.macalester.edu/honors/hall-of-fame/heather-lendway/184) and still has records at the pool. 
+  5. In this exercise, you get to meet Lisa's sister, Heather! She is a proud Mac grad, currently works as a Data Scientist where she uses R everyday, and for a few years (while still holding a full-time job) she was a pro triathlete. You are going to map one of her races. The data from each discipline of the Ironman 70.3 Pan Am championships, Panama is in a separate file - `panama_swim`, `panama_bike`, and `panama_run`. Create a similar map to the one you created with my cycling data. You will need to make some small changes: 
+  1. combine the files putting them in swim, bike, run order (HINT: `bind_rows()`), 
+  2. make the leading dot a different color depending on the event (for an extra challenge, make it a different image using `geom_image()!), 
+  3. CHALLENGE (optional): color by speed, which you will need to compute on your own from the data. You can read Heather's race report [here](https://heatherlendway.com/2016/02/10/ironman-70-3-pan-american-championships-panama-race-report/). She is also in the Macalester Athletics [Hall of Fame](https://athletics.macalester.edu/honors/hall-of-fame/heather-lendway/184) and still has records at the pool. 
   
 ```{r eval=FALSE}
 panama_map <- get_stamenmap(
@@ -260,21 +295,29 @@ bind_panama <- bind_rows(panama_swim, panama_bike, panama_run)
 
 ggmap(panama_map) +  
     geom_path(data = bind_panama, 
-            aes(x = lon, y = lat, color = ele),
+            aes(x = lon, y = lat),
             size = .8) +
-    scale_color_viridis_c(option = "magma") +
+    #scale_color_viridis_c(option = "magma") +
+    geom_point(data = bind_panama,
+               aes(x = lon, y = lat, color = event),
+               size = 5) +
     theme_map() +
     theme(legend.background = element_blank()) +
     labs(title = "Heather's Ironman 70.3 Panama Bike Championships", 
        subtitle = "Date: {frame_along}",
        x = "",
-       y = "",
-       color = "ele") +
+       y = "") +
     transition_reveal(time)
 
 anim_save("panama_anim.gif")
 
 ```
+  
+  
+```{r, echo=FALSE}
+knitr::include_graphics("panama_anim.gif")
+```
+    
   
 ## COVID-19 data
 
@@ -293,17 +336,59 @@ census_pop_est_2018 <- read_csv("https://www.dropbox.com/s/6txwv3b4ng7pepe/us_ce
   mutate(state = str_to_lower(state))
 
 states_map <- map_data("state")
+
+cum_covid <- covid19 %>% 
+  filter(day(date) == 15) %>% 
+  mutate(state_name = str_to_lower(`state`))
+
+covid_with_pop <- cum_covid %>% 
+  left_join(census_pop_est_2018,
+            by = c("state_name" = "state")) %>% 
+  mutate(covid_per_10000 = (cases/est_pop_2018)*10000)
 ```
+
+```{r eval=FALSE}
+covid_states_anim <- covid_with_pop %>% 
+  ggplot() +
+  geom_map(map = states_map,
+           aes(map_id = state_name,
+               fill = covid_per_10000,
+               group = date)) +
+  scale_fill_viridis_c(option = "magma") +
+  expand_limits(x = states_map$long, y = states_map$lat) +
+  labs(title = "Cumulative COVID-19 Cases per 10,000 in the U.S. Over Time (Until March 2022)",
+       subtitle = "Date: {closest_state}",
+       caption = "Map by Rachel Percy | April 2, 2022",
+       fill = "Cases per 10,000 people") +
+  theme_map() +
+  theme(legend.background = element_blank()) +
+  transition_states(date) 
+
+animate(covid_states_anim,
+        nframes = 200,
+        end_pause = 10)
+
+anim_save("covid_states_anim.gif")
+```
+
+```{r, echo=FALSE}
+knitr::include_graphics("covid_states_anim.gif")
+```
+
+> Wow, this is very cool. I was surprised to see that Wisconsin and Illinois were some of the states with the earliest COVID cases. I assumed it would have mostly been just on the east and west coasts. Also noticed that West Virginia had low COVID cases for a long time. Recently, Oregon, Vermont, Maryland, and Maine appear to have the lowest COVID cases per 10,000.
 
 ## Your first `shiny` app (for next week!)
 
   7. This app will also use the COVID data. Make sure you load that data and all the libraries you need in the `app.R` file you create. You should create a new project for the app, separate from the homework project. Below, you will post a link to the app that you publish on shinyapps.io. You will create an app to compare states' daily number of COVID cases per 100,000 over time. The x-axis will be date. You will have an input box where the user can choose which states to compare (`selectInput()`), a slider where the user can choose the date range, and a submit button to click once the user has chosen all states they're interested in comparing. The graph should display a different line for each state, with labels either on the graph or in a legend. Color can be used if needed. 
   
-Put the link to your app here: 
+  
+Put the link to your app here: https://r-percy.shinyapps.io/2022_03_exercise_5_shinyapp/
   
 ## GitHub link
 
   8. Below, provide a link to your GitHub repo with this set of Weekly Exercises. 
+  
+  
 
 
 **DID YOU REMEMBER TO UNCOMMENT THE OPTIONS AT THE TOP?**
